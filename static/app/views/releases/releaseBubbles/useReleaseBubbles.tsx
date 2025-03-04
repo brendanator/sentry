@@ -1,4 +1,4 @@
-import type {ReactElement} from 'react';
+import {type ReactElement, useCallback, useRef} from 'react';
 import {type Theme, useTheme} from '@emotion/react';
 import type {
   CustomSeriesOption,
@@ -32,7 +32,10 @@ import {
   BUBBLE_SERIES_ID,
 } from 'sentry/views/releases/releaseBubbles/constants';
 import {createReleaseBubbleHighlighter} from 'sentry/views/releases/releaseBubbles/createReleaseBubbleHighlighter';
-import type {Bucket} from 'sentry/views/releases/releaseBubbles/types';
+import type {
+  Bucket,
+  ChartRendererProps,
+} from 'sentry/views/releases/releaseBubbles/types';
 import {createReleaseBuckets} from 'sentry/views/releases/releaseBubbles/utils/createReleaseBuckets';
 
 interface CreateReleaseBubbleMouseListenersParams {
@@ -42,11 +45,7 @@ interface CreateReleaseBubbleMouseListenersParams {
     renderer: DrawerConfig['renderer'],
     options: DrawerConfig['options']
   ) => void;
-  chartRenderer?: (rendererProps: {
-    end: Date;
-    releases: ReleaseMetaBasic[];
-    start: Date;
-  }) => ReactElement;
+  chartRenderer?: (rendererProps: ChartRendererProps) => ReactElement;
 }
 
 /**
@@ -322,26 +321,44 @@ ${t('Click to expand')}
 }
 
 interface UseReleaseBubblesParams {
-  chartRef: React.RefObject<ReactEchartsRef | null>;
+  /**
+   * The whitespace around the bubbles.
+   */
   bubblePadding?: number;
+  /**
+   * The size (height) of the bubble
+   */
   bubbleSize?: number;
-  chartRenderer?: (rendererProps: {
-    end: Date;
-    releases: ReleaseMetaBasic[];
-    start: Date;
-  }) => ReactElement;
+  /**
+   * This is a callback function that is used in ReleasesDrawer when rendering
+   * the chart inside of the drawer.
+   */
+  chartRenderer?: (rendererProps: ChartRendererProps) => ReactElement;
+  /**
+   * Number of desired bubbles/buckets to create
+   */
+  desiredBuckets?: number;
+  /**
+   * The maximum/latest timestamp of the chart's timeseries
+   */
   maxTime?: number;
+  /**
+   * The minimum/earliest timestamp of the chart's timeseries
+   */
   minTime?: number;
+  /**
+   * List of releases that will be grouped
+   */
   releases?: ReleaseMetaBasic[];
 }
 export function useReleaseBubbles({
-  chartRef,
   chartRenderer,
   releases,
   minTime,
   maxTime,
   bubbleSize = 4,
   bubblePadding = 2,
+  desiredBuckets = 10,
 }: UseReleaseBubblesParams) {
   const organization = useOrganization();
   const {openDrawer} = useDrawer();
@@ -355,13 +372,28 @@ export function useReleaseBubbles({
   const releasesMaxTime = defined(selection.datetime.end)
     ? new Date(selection.datetime.end).getTime()
     : Date.now();
+  const chartRef = useRef<ReactEchartsRef | null>(null);
   const hasReleaseBubbles = organization.features.includes('release-bubbles-ui');
+  const handleChartRef = useCallback((e: ReactEchartsRef | null) => {
+    chartRef.current = e;
+
+    if (e?.getEchartsInstance) {
+      createReleaseBubbleHighlighter(e.getEchartsInstance());
+    }
+  }, []);
+
   const buckets =
     (hasReleaseBubbles &&
       releases?.length &&
       minTime &&
       maxTime &&
-      createReleaseBuckets(minTime, maxTime, releasesMaxTime, releases)) ||
+      createReleaseBuckets({
+        minTime,
+        maxTime,
+        finalTime: releasesMaxTime,
+        releases,
+        desiredBuckets,
+      })) ||
     [];
 
   if (!releases || !buckets.length) {
@@ -377,7 +409,7 @@ export function useReleaseBubbles({
   const totalBubblePaddingY = bubblePadding * 2;
 
   return {
-    createReleaseBubbleHighlighter,
+    createReleaseBubbleHighlighter: handleChartRef,
 
     /**
      * An object map of ECharts event handlers. These should be spread onto a Chart component

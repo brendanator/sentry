@@ -112,17 +112,18 @@ export function TimeSeriesWidgetVisualization(props: TimeSeriesWidgetVisualizati
     releaseBubbleXAxis,
     releaseBubbleGrid,
   } = useReleaseBubbles({
-    chartRef,
     chartRenderer: ({start: trimStart, end: trimEnd}) => {
       return (
-        <TimeSeriesWidgetVisualization
-          {...props}
-          disableReleaseNavigation
-          plottables={props.plottables.map(plottable =>
-            plottable.constrain(trimStart, trimEnd)
-          )}
-          showReleaseAs="line"
-        />
+        <div style={{height: '220px'}}>
+          <TimeSeriesWidgetVisualization
+            {...props}
+            disableReleaseNavigation
+            plottables={props.plottables.map(plottable =>
+              plottable.constrain(trimStart, trimEnd)
+            )}
+            showReleaseAs="line"
+          />
+        </div>
       );
     },
     minTime: earliestTimeStamp ? new Date(earliestTimeStamp).getTime() : undefined,
@@ -167,7 +168,7 @@ export function TimeSeriesWidgetVisualization(props: TimeSeriesWidgetVisualizati
       registerWithWidgetSyncContext(echartsInstance);
 
       if (hasReleaseBubblesSeries) {
-        createReleaseBubbleHighlighter(echartsInstance);
+        createReleaseBubbleHighlighter(e);
       }
     },
     [
