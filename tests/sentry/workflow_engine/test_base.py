@@ -187,6 +187,7 @@ class BaseWorkflowTest(TestCase, OccurrenceTestMixin):
         project: Project | None = None,
         event: Event | None = None,
         occurrence: IssueOccurrence | None = None,
+        environment: str | None = None,
         fingerprint="test_fingerprint",
     ) -> tuple[Group, Event, GroupEvent]:
         project = project or self.project
@@ -194,6 +195,7 @@ class BaseWorkflowTest(TestCase, OccurrenceTestMixin):
             project.id,
             datetime.now(),
             fingerprint,
+            environment,
         )
 
         group = self.create_group(project=project)
