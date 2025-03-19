@@ -316,11 +316,13 @@ function ReleasesDetailContainer(props: ReleasesDetailContainerProps) {
           id: String(id),
           slug,
         }))}
-        nextPath={normalizeUrl({
-          pathname: `/organizations/${organization.slug}/releases/${encodeURIComponent(
-            release!
-          )}/`,
-        })}
+        nextPath={{
+          pathname: normalizeUrl(
+            `/organizations/${organization.slug}/releases/${encodeURIComponent(
+              release!
+            )}/`
+          ),
+        }}
         noProjectRedirectPath={makeReleasesPathname({
           organization,
           path: '/',
