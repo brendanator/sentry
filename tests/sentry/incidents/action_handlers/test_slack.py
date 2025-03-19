@@ -10,8 +10,8 @@ from sentry.constants import ObjectStatus
 from sentry.incidents.logic import update_incident_status
 from sentry.incidents.models.alert_rule import AlertRuleTriggerAction
 from sentry.incidents.models.incident import IncidentStatus, IncidentStatusMethod
+from sentry.incidents.typings.metric_detector import AlertContext, MetricIssueContext
 from sentry.integrations.messaging.spec import MessagingActionHandler
-from sentry.integrations.metric_alerts import AlertContext
 from sentry.integrations.slack.message_builder.incidents import SlackIncidentsMessageBuilder
 from sentry.integrations.slack.spec import SlackMessagingSpec
 from sentry.integrations.types import EventLifecycleOutcome
@@ -85,19 +85,26 @@ class SlackActionHandlerTest(FireTest):
         metric_value = 1000
         status = IncidentStatus(incident.status)
         with self.tasks():
-            getattr(self.handler, method)(self.action, incident, self.project, metric_value, status)
+            getattr(self.handler, method)(
+                action=self.action,
+                incident=incident,
+                project=self.project,
+                new_status=status,
+                metric_value=metric_value,
+            )
 
         return incident, chart_url
 
     def _assert_blocks(self, mock_post, incident, metric_value, chart_url):
         slack_body = SlackIncidentsMessageBuilder(
             alert_context=AlertContext.from_alert_rule_incident(incident.alert_rule),
-            open_period_identifier=incident.identifier,
+            metric_issue_context=MetricIssueContext.from_legacy_models(
+                incident,
+                IncidentStatus(incident.status),
+                metric_value,
+            ),
             organization=incident.organization,
-            snuba_query=incident.alert_rule.snuba_query,
-            new_status=IncidentStatus(incident.status),
             date_started=incident.date_started,
-            metric_value=metric_value,
             chart_url=chart_url,
         ).build()
         assert isinstance(slack_body, dict)
@@ -254,7 +261,11 @@ class SlackActionHandlerTest(FireTest):
         metric_value = 1000
         with self.tasks():
             self.handler.fire(
-                action, incident, self.project, metric_value, IncidentStatus(incident.status)
+                action=action,
+                incident=incident,
+                project=self.project,
+                metric_value=metric_value,
+                new_status=IncidentStatus(incident.status),
             )
 
     @patch("sentry.integrations.slack.sdk_client.SlackSdkClient.chat_postMessage")
@@ -266,7 +277,11 @@ class SlackActionHandlerTest(FireTest):
         metric_value = 1000
         with self.tasks():
             self.handler.fire(
-                self.action, incident, self.project, metric_value, IncidentStatus(incident.status)
+                action=self.action,
+                incident=incident,
+                project=self.project,
+                metric_value=metric_value,
+                new_status=IncidentStatus(incident.status),
             )
 
         assert not mock_post.called
@@ -283,7 +298,11 @@ class SlackActionHandlerTest(FireTest):
         metric_value = 1000
         with self.tasks():
             self.handler.fire(
-                self.action, incident, self.project, metric_value, IncidentStatus(incident.status)
+                action=self.action,
+                incident=incident,
+                project=self.project,
+                metric_value=metric_value,
+                new_status=IncidentStatus(incident.status),
             )
 
         mock_post.assert_called
