@@ -65,6 +65,7 @@ class BaseDeriveCodeMappings(TestCase):
         platform: str,
         expected_stack_root: str,
         expected_source_root: str,
+        expected_num_code_mappings: int = 1,
     ) -> None:
         with (
             patch(f"{CLIENT}.get_tree", return_value=self._repo_tree_files(repo_files)),
@@ -72,12 +73,15 @@ class BaseDeriveCodeMappings(TestCase):
             patch(REPO_TREES_GET_REPOS, return_value=[self._repo_info()]),
             patch("sentry.utils.metrics.incr") as mock_incr,
         ):
+            existing_repositories = Repository.objects.all()
             event = self.create_event(frames, platform)
             process_event(self.project.id, event.group_id, event.event_id)
             code_mappings = RepositoryProjectPathConfig.objects.all()
-            assert len(code_mappings) == 1
-            code_mapping = code_mappings[0]
-            assert code_mapping.stack_root == expected_stack_root
+            assert len(code_mappings) == expected_num_code_mappings
+            code_mapping = code_mappings.filter(
+                project=self.project, stack_root=expected_stack_root
+            ).first()
+            assert code_mapping is not None
             assert code_mapping.source_root == expected_source_root
             platform_config = PlatformConfig(platform)
             dry_run = platform_config.is_dry_run_platform()
@@ -87,11 +91,12 @@ class BaseDeriveCodeMappings(TestCase):
                 tags={"dry_run": dry_run, "platform": event.platform},
                 sample_rate=1.0,
             )
-            mock_incr.assert_any_call(
-                key=f"{METRIC_PREFIX}.repository.created",
-                tags={"dry_run": dry_run, "platform": event.platform},
-                sample_rate=1.0,
-            )
+            if existing_repositories == 0:
+                mock_incr.assert_any_call(
+                    key=f"{METRIC_PREFIX}.repository.created",
+                    tags={"dry_run": dry_run, "platform": event.platform},
+                    sample_rate=1.0,
+                )
 
     def _process_and_assert_no_code_mapping(
         self,
@@ -247,6 +252,31 @@ class TestGenericBehaviour(BaseDeriveCodeMappings):
                     expected_stack_root="foo/",
                     expected_source_root="src/foo/",
                 )
+
+    def test_multiple_calls(self) -> None:
+        platform = "other"
+        with (
+            patch(f"{CODE_ROOT}.utils.get_platform_config", return_value={}),
+            patch(f"{CODE_ROOT}.utils.PlatformConfig.is_supported", return_value=True),
+        ):
+            # XXX: We need a test for when repo_files changes over time
+            repo_files = ["src/foo/bar.py", "src/baz/qux.py"]
+            self._process_and_assert_code_mapping(
+                repo_files=repo_files,
+                frames=[self.frame("foo/bar.py", True)],
+                platform=platform,
+                expected_stack_root="foo/",
+                expected_source_root="src/foo/",
+                expected_num_code_mappings=1,
+            )
+            self._process_and_assert_code_mapping(
+                repo_files=repo_files,
+                frames=[self.frame("baz/qux.py", True)],
+                platform=platform,
+                expected_stack_root="baz/",
+                expected_source_root="src/baz/",
+                expected_num_code_mappings=2,
+            )
 
 
 class LanguageSpecificDeriveCodeMappings(BaseDeriveCodeMappings):
